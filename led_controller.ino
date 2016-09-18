@@ -26,19 +26,28 @@ const uint8_t INTRO_SPEED = 80;  // Speed in % (1-99) for intro/test animation (
 const uint32_t INTRO_COLORS[] = { 0xFF0000, 0x00FF00, 0x0000FF };  // Colors used in intro/test
 
 
-// RGB-LED strip settings:
+// RGB-LED strip settings (used/tested for WS2812B strip):
+// The number of LEDs has to match the Hyperion/Boblight configuration!
+// If you correct the color order here - you don't need to do it in Hyperion (and vice versa).
+// The same goes probably for brightness and color correction (which I never tested myself).
 
 const uint8_t PIN_DATA = 8;  // Pin connected to the data line of the strip
-const uint16_t NUM_LEDS = 30;  // Total number of RGB-LEDs to control (has to match Hyperion/Boblight configuration)
-const uint16_t SHOW_DELAY = 200;  // Delay after FastLED.show() in µs (1 µs = 0.001 ms)
-const uint8_t BRIGHTNESS = 255;  // Max. overall brightness (0-255), can also be controlled by Hyperion
+const uint16_t NUM_LEDS = 30;  // Total number of RGB-LEDs to control
+const EOrder COLOR_ORDER = GRB;  // Order of colors: RGB, RBG, GRB, GBR, BRG, BGR
+const uint16_t SHOW_DELAY = 1;  // Delay after each frame in ms (1 ms = 0.001 s)
+const uint8_t BRIGHTNESS = 255;  // Max. overall brightness (0-255)
 //const uint32_t COLOR_CORRECTION = 0xFFB0F0;  // Color correction function of the FastLED library (not tested!)
 
 
-// Serial/USB data settings:
+// Serial/USB data settings and speed considerations:
+// At 57600 bit/s or 7200 byte/s, the controller receives 1 byte every 139 µs (0.139 ms).
+// At 115200 bit/s it will be 1 byte every 69 µs (0.069 ms).
+// A single WS2812 LED takes 30 µs to write, 30 LEDs 900 µs (0.900 ms), 60 LEDs 1800 µs and 120 LEDs 3600 µs
+// For every LED 3 bytes are needed, for 30 LEDs 90 bytes, for 60 LEDs 180 bytes and for 120 LEDs 360 bytes
+// More info/Source: https://github.com/FastLED/FastLED/wiki/Interrupt-problems
+// More about Arduino Serial: https://www.arduino.cc/en/Serial/Begin
 
-const uint32_t SERIAL_RATE = 115200;  // Serial port speed (i.e. 9600, 19200, 38400, 56000, 57600, 115200);
-                                      // Has to match the value set for "rate" in hyperion.config.json or boblight.conf
+const uint32_t SERIAL_RATE = 115200;  // Serial port speed (i.e. 9600, 19200, ... 57600, 115200)
 const uint16_t READ_BYTES = (NUM_LEDS * 3);  // Number of bytes of color data to read (3 Bytes/LED)
 
 // Build Adalight compatible 6 byte long prefix:
@@ -76,7 +85,7 @@ void setup() {
   pinMode(PIN_WAKE_IRQ, INPUT);
   digitalWrite(PIN_WAKE_IRQ, HIGH);  // Activate the internal pull-up resistor
 
-  FastLED.addLeds<WS2812B, PIN_DATA, GRB>(strip, NUM_LEDS);  // See FastLED documentation for this!
+  FastLED.addLeds<WS2812B, PIN_DATA, COLOR_ORDER>(strip, NUM_LEDS);  // See FastLED documentation for this!
   //FastLED.setCorrection(COLOR_CORRECTION);  // Optional overall color correction
   FastLED.setBrightness(BRIGHTNESS);  // Set overall brightness to use
   FastLED.clear();
@@ -118,13 +127,13 @@ void loop() {
 
         Serial.readBytes(buffer, PREFIX_SIZE - 1);  // ...and put them into the buffer
 
-        for (uint8_t i = 0; i < (PREFIX_SIZE - 1); i++) {  // Now try to match *each* of them...
+        state = DO_DATA;  // Default to color processing if all bytes match
 
-          if (buffer[i] == PREFIX[i + 1]) {  // ...against the given prefix; if they are still matching...
-            state = DO_DATA;  // ...prepare to switch state for processing the color data
-          } else {
-            state = WAITING;  // BUT as soon as one byte doesn't match - return to waiting state
-            break;  // Don't wait for finishing the for-loop
+        for (uint8_t i = 0; i < (PREFIX_SIZE - 1); i++) {  // Now match *each* remaining byte...
+
+          if (buffer[i] != PREFIX[i + 1]) {  // ...against the prefix
+            state = WAITING;  // As soon as one byte doesn't match - return to waiting state...
+            break;  // ...and don't check any more bytes.
           }
 
         }
@@ -138,8 +147,8 @@ void loop() {
 
       if (Serial.available() > 0) {  // "0" because Arduino's Serial buffer size is only 64 bytes - so simply just try...
         if ((Serial.readBytes((uint8_t*) strip, READ_BYTES)) == READ_BYTES) {  // Copy all color values at once to strip
-          FastLED.show();  // If sucessfull, show them
-          delayMicroseconds(SHOW_DELAY);  // Insert a very short delay (µs!)
+          FastLED.show();  // If sucessfull, show them...
+          FastLED.delay(SHOW_DELAY);  // ...and wait a very short moment.
         }
         state = WAITING;  // Back to waiting for next set of data
       }
