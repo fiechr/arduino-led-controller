@@ -9,7 +9,10 @@
 #include <avr/sleep.h>  // Allows to control the sleep modes (already included with Arduino)
 #include <FastLED.h>  // FastLED lib, see: http://fastled.io/
 
+#define SLEEP_ENABLED true
+#define INTRO_ENABLED true
 
+#if(SLEEP_ENABLED)
 // Powersaving settings:
 
 const uint8_t PIN_SIGNAL = LED_BUILTIN;  // Optional LED for signaling power saving state
@@ -18,13 +21,16 @@ const uint8_t NUM_WAKE_IRQ = 0;  // Corresponding *interrupt* used for wakeup;
                                  // see http://playground.arduino.cc/Code/Interrupts
 const uint32_t NUM_WAIT_LOOPS = 10000000;  // Number of loops to wait before going to sleep
                                            // (1M equals approx. 6s, 10M ~ 60s)
+#endif
 
+#if(INTRO_ENABLED)
 // Intro settings:
 
-const uint8_t INTRO_SPEED = 80;  // Speed in % (1-99) for intro/test animation (0 or 100 means off)
+const uint8_t INTRO_SPEED = 80;  // Speed in % (1-99) for intro/test animation
                                  // The intro is shown only once after powerup or reset
 const uint32_t INTRO_COLORS[] = { 0xFF0000, 0x00FF00, 0x0000FF };  // Colors used in intro/test
 
+#endif
 
 // RGB-LED strip settings (used/tested for WS2812B strip):
 // The number of LEDs has to match the Hyperion/Boblight configuration!
@@ -90,7 +96,9 @@ void setup() {
   FastLED.setBrightness(BRIGHTNESS);  // Set overall brightness to use
   FastLED.clear();
 
+#if(INTRO_ENABLED)
   showIntro(INTRO_SPEED);
+#endif
 
   Serial.begin(SERIAL_RATE);
 
@@ -108,15 +116,19 @@ void loop() {
       if (Serial.available() > 0) {
         if (Serial.read() == PREFIX[0]) {  // If first char matches first prefix char...
           state = DO_PREFIX;  // ...switch to processing prefix
+#if(SLEEP_ENABLED)
           idleCounter = 0;  // Reset idle counter
+#endif
           break;
         }
       }
 
+#if(SLEEP_ENABLED)
       if (++idleCounter > NUM_WAIT_LOOPS) {  // increment and check idle counter
         idleCounter = 0; // Reset idle counter
         goToSleep();  // after <NUM_WAIT_LOOPS> loops without matching byte received, go to sleep
       }
+#endif
 
       break;
 
@@ -159,10 +171,9 @@ void loop() {
 
 }
 
+#if(INTRO_ENABLED)
 
 // The following function will show a short animation independet of any serial connection or data.
-// If you don't want it to show, set INTRO_SPEED to 0 or 100 or remove the function call in setup().
-// If you want to keep the program size as small as possible you can remove it altogether.
 
 void showIntro(const uint8_t speed) {
 
@@ -196,6 +207,9 @@ void showIntro(const uint8_t speed) {
 
 }
 
+#endif
+
+#if(SLEEP_ENABLED)
 
 // Prepares and executes sleep mode.
 // To wake up again, an interrupt is used. To make this work, pin 0 (RX) and pin 2 have to be connected
@@ -229,3 +243,5 @@ void onInterrupt() {
   detachInterrupt(NUM_WAKE_IRQ);  // Remove the interrupt. This makes sure no more interrupts are fired
 
 }
+
+#endif
