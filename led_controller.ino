@@ -85,11 +85,13 @@ CRGB strip[NUM_LEDS];  // Contains the current color values for each RGB-LED on 
 
 void setup() {
 
+#if(SLEEP_ENABLED)
   pinMode(PIN_SIGNAL, OUTPUT);
   digitalWrite(PIN_SIGNAL, HIGH);  // Turn on signal LED
 
   pinMode(PIN_WAKE_IRQ, INPUT);
   digitalWrite(PIN_WAKE_IRQ, HIGH);  // Activate the internal pull-up resistor
+#endif
 
   FastLED.addLeds<WS2812B, PIN_DATA, COLOR_ORDER>(strip, NUM_LEDS);  // See FastLED documentation for this!
   //FastLED.setCorrection(COLOR_CORRECTION);  // Optional overall color correction
